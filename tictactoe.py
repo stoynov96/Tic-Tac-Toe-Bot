@@ -27,7 +27,7 @@ class LineScore:
             self.score = -1
 
 
-class Board:
+class Board(object):
     
     # Initializes the board with a specific size of one dimension. The board is always a square.
     def __init__(self, size):

@@ -1,6 +1,8 @@
 import tictactoe as ttt
 import os
 import random
+import network
+import data_processing as datap
 
 clear = lambda: os.system('cls')
 
@@ -12,6 +14,9 @@ class gs:
 
 # Initialize game board
 board = ttt.Board(int(input("Enter size of the board: ")))
+
+# Initialize bot neural network
+bot_net = network.Network([len(board.board)*2,30,10,9])
 
 # Prompt
 def prompt():
@@ -42,13 +47,16 @@ def player_move():
 
 # <return> if bot won
 def bot_move():
-	cell_id = random.randint(0, len(board.board)-1)
-	success, won = False, False
-	while not success:
-		success, won = board.fill(cell_id, gs.BOT_ID)
-		cell_id = random.randint(0, len(board.board)-1)
+	cell_id = bot_net.feedforward(datap.convert_board(board.board, gs.BOT_ID, gs.PLAYER_ID))
+	cell_id = datap.extract_cell_id(cell_id) # extract the cell id from the output
+	input('Bot played cell #{0}\n'.format(cell_id+1))
+	success, won = board.fill(cell_id, gs.BOT_ID)
+	if not success:
+		print("Player won")
+		exit()
 
 	return won
+
 
 # Execution Loop
 clear()
