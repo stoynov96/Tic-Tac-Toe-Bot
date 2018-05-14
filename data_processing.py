@@ -11,9 +11,6 @@ def convert_board(board, my_player_id, other_player_id):
 	# next n layers are their (the player's) marks
 	last = [int(cell == other_player_id) for cell in board]
 
-	# debug: print
-	print('input layer: ', first+last) # debug
-
 	return reshape( first+last , (len(first)+len(last), 1) )
 
 # Extracts a cell id to play from a neural network output

@@ -17,6 +17,13 @@ class LineScore:
         self.score = init_score
         self.player_id = player_id
 
+    # Resets the line score (this can be column, row or diagonal score)
+    # <param> player_id:    ID of the player that has played on this line.
+    #                       If another player plays on this line, no one can win there
+    def reset_score(self, init_score, player_id):
+        self.score = init_score
+        self.player_id = player_id
+
     # Adds score to a specific line
     def add_score(self, player_id, score_amount = 1):
         self.score += score_amount
@@ -40,6 +47,22 @@ class Board(object):
         # Diagonal Score (score , dominating player id)
         # size = 2. Main and Secondary. Others are not counted in Tic Tac Toe
         self.diag_score = [LineScore(0,GameSettings.VOID_CELL), LineScore(0,GameSettings.VOID_CELL)]
+
+    # Clears board to prepare for a new game
+    # Using this saves memory allocation overhead
+    def clear(self):
+        # Clear board marks
+        for i in range(len(self.board)):
+            self.board[i] = GameSettings.VOID_CELL
+        # Clear row and column score
+        for i in range(self.size):
+            self.col_score[i].reset_score(0, GameSettings.VOID_CELL)
+            self.row_score[i].reset_score(0, GameSettings.VOID_CELL)
+        # Clear diagonal scores
+        self.diag_score[0].reset_score(0, GameSettings.VOID_CELL)
+        self.diag_score[1].reset_score(0, GameSettings.VOID_CELL)
+
+
 
 
     # Fills a specific cell with a specified player id's mark

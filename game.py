@@ -1,79 +1,63 @@
 import tictactoe as ttt
 import os
-import random
-import network
 import data_processing as datap
 
 clear = lambda: os.system('cls')
 
 # Game Settings
 class gs:
-	PLAYER_ID = 1
-	BOT_ID = 2
 
+	BOARD_SIZE = 3
 
-# Initialize game board
-board = ttt.Board(int(input("Enter size of the board: ")))
-
-# Initialize bot neural network
-bot_net = network.Network([len(board.board)*2,30,10,9])
-
-# Prompt
-def prompt():
-
-	print("Board cells numbers:")
-	[print([i*board.size + j + 1 for j in range(board.size)]) for i in range(board.size)]
-
-	print("Current board state:")
-	board.display()
-
-
-# <return> if player won
-def player_move():
-
-	success, won = False, False
-
-	while not success:
-		clear()
-		prompt()
-		cell_id = int(input()) - 1
-		try:
-			success, won = board.fill(cell_id, gs.PLAYER_ID)
-		except IndexError as ie:
-			print( "Could not fill cell. Please enter a valid cell id between {0} and {1}".format(0, len(board.board)) )
-
-	return won
+	BOT_COUNT = 2 # 1 if player. 2 if no player
+	BOT_IDS = [1,2]
 
 
 # <return> if bot won
-def bot_move():
-	cell_id = bot_net.feedforward(datap.convert_board(board.board, gs.BOT_ID, gs.PLAYER_ID))
+def bot_move(bot_net, player_id, opponent_id):
+	cell_id = bot_net.feedforward(datap.convert_board(board.board, player_id, opponent_id))
 	cell_id = datap.extract_cell_id(cell_id) # extract the cell id from the output
-	input('Bot played cell #{0}\n'.format(cell_id+1))
-	success, won = board.fill(cell_id, gs.BOT_ID)
-	if not success:
-		print("Player won")
-		exit()
 
-	return won
+	success, won = board.fill(cell_id, player_id)
+
+	return success, won
 
 
-# Execution Loop
-clear()
-while True:
-	# Player plays a move
-	won = player_move()
-	if won:
-		board.display()
-		print('Player won')
-		break
 
-	# Bot plays a move
-	won = bot_move()
-	if won:
-		board.display()
-		print('Bot won')
-		break
+# Initialize game board
+# board = ttt.Board(int(input("Enter size of the board: ")))
+board = ttt.Board(gs.BOARD_SIZE)
 
-	# clear()
-	# board.DEBUG_dump()
+
+# <param> bots:	list of length 2 - the two bots that will play against each other
+# <return> id of the bot that won the game. negative ID if some bot was disqualified for breaking the rules
+def play_game(bots, show_game = False):
+
+	# Execution Loop
+	while True:
+
+		# Make sure no more than two players are playing
+		try:
+			if len(bots) != 2:
+				raise ValueError("Exactly two bots must play tic tac toe")
+		except ValueError as va:
+			raise
+
+		# Bots play their moves
+		for i in range(len(bots)):
+			success, won = bot_move(bots[i], gs.BOT_IDS[i], gs.BOT_IDS[1-i])
+
+			if show_game: 
+				board.display()
+				input()
+
+			if won:
+				if show_game:
+					board.display()
+					print('Bot {0} won'.format(i))
+				return gs.BOT_IDS[i]
+			if not success:
+				if show_game:
+					board.display()
+					print('Bot {0} lost'.format(i))
+				return -gs.BOT_IDS[i]
