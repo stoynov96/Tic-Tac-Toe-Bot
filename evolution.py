@@ -9,8 +9,9 @@ from itertools import chain
 
 GENE_POOL_SIZE = 50
 
-# value +/- (abs(value)*mutation) max value of the mutation variable
-MUTATION_MAX_DEVIATION = 2.0
+# standard deviation bounds for each mutation
+MUTATION_DEVIATION_MIN = 0.5
+MUTATION_DEVIATION_MAX = 10.0
 # Fraction of neural net's weights and biases to mutate
 MUTATION_PORTION = 0.05
 
@@ -92,7 +93,9 @@ class BotGenePool():
 			gene_pool += BotGenePool.combine([gene_pool[i] for i in combined_indeces])
 
 			# Mutate genomes
-			gene_pool += BotGenePool.mutate(gene_pool, mutated_count)
+			mutation_fitness = [fitness[i] for i in top_indeces] + [ fitness[top_indeces[len(top_indeces)-1]] for i in range(mutated_count)]
+				# assigning the minimum fitness to the bred genomes to encourage their mutation
+			gene_pool += BotGenePool.mutate(gene_pool, mutated_count, mutation_fitness)
 
 			# Insert new genomes
 			gene_pool += [network.Network(NETWORK_LAYER_SIZES) for i in range(new_count)]
@@ -135,8 +138,9 @@ class BotGenePool():
 	# The number of mutated entries is such that a desired mutated pool length is achieved
 	# <param> original_pool:		pool that should be mutated
 	# <param> mutated_pool_length:	length of the mutated gene pool
+	# <param> original_fitness:		sorted fitness of original genomes (descending)
 	@staticmethod
-	def mutate(original_pool, mutated_pool_length):
+	def mutate(original_pool, mutated_pool_length, original_fitness):
 
 		# Ratio of original pool size to mutated pool size
 		mutated_pool = [None for i in range(mutated_pool_length)]
@@ -144,17 +148,29 @@ class BotGenePool():
 		# Get random indeces of original pool to mutate
 		mutated_indeces = random.sample(range(0,len(original_pool)), mutated_pool_length)
 
+		# Calculate maximum and minimum fitness
+		max_fitness = original_fitness[0]
+		min_fitness = original_fitness[len(original_fitness)-1]
+
 		j = 0
+		# print('mut pool: {0}'.format(original_fitness) ) # debug
 		for i in mutated_indeces:
-			mutated_pool[j] = BotGenePool.mutate_genome(original_pool[i])
+			# Calculate standard deviation for each genome mutation operation
+			normal_dist_to_max = (max_fitness-original_fitness[i]) / (max_fitness+1 - min_fitness) # prevent division by zero
+			mutation_deviation = MUTATION_DEVIATION_MIN + normal_dist_to_max * (MUTATION_DEVIATION_MAX - MUTATION_DEVIATION_MIN)
+			# print('  i={0} ft={1} md={2}'.format(i, original_fitness[i],mutation_deviation) ) # debug
+
+			# Mutate genome
+			mutated_pool[j] = BotGenePool.mutate_genome(original_pool[i], mutation_deviation)
 			j += 1
 
 		return mutated_pool
 
 	# Mutates a single genome
 	# <param> genome:		neural network to mutate
+	# <param> mutation_deviation:	standard deviation for each mutation
 	@staticmethod
-	def mutate_genome(genome):
+	def mutate_genome(genome, mutation_deviation):
 		# Get number of weights and biases to mutate
 		mutate_weight_count = math.floor(genome.total_weights_count * MUTATION_PORTION)
 		mutate_bias_count = math.floor(genome.total_biases_count * MUTATION_PORTION)
@@ -170,21 +186,23 @@ class BotGenePool():
 		for mut_w in mutate_weights_inds:
 			layer, k, j = BotGenePool.weight_id_to_indeces(mut_w, mutated_genome)
 			# print('mutating weights {0}/{1}/{2} = {3}'.format(layer,k,j, mutated_genome.weights[layer][k][j])) # debug
-			mutated_genome.weights[layer][k][j] = BotGenePool.value_mutate(mutated_genome.weights[layer][k][j])
+			mutated_genome.weights[layer][k][j] = BotGenePool.value_mutate(mutated_genome.weights[layer][k][j], mutation_deviation)
 			# print('  mutated = {0}'.format(mutated_genome.weights[layer][k][j])) # debug
 
 		for mut_b in mutate_bias_inds:
 			layer, k = BotGenePool.bias_id_to_indeces(mut_b, mutated_genome)
-			mutated_genome.biases[layer][k] = BotGenePool.value_mutate(mutated_genome.biases[layer][k])
+			mutated_genome.biases[layer][k] = BotGenePool.value_mutate(mutated_genome.biases[layer][k], mutation_deviation)
 
 		return mutated_genome
 
 	# Mutates one value and returns the mutated value
-	# Mutated value is between -MUTATION_MAX_DEVIATION*value <= value <= MUTATION_MAX_DEVIATION*value
+	# Changes the mutated value by replacing it with a normal random variable with a mean the old value
+	# and a specified standard deviation
 	@staticmethod
-	def value_mutate(value):
+	def value_mutate(value, standard_deviation):
 		# Mutation severity is uniform
-		return value + math.fabs(value) * random.uniform(-MUTATION_MAX_DEVIATION, MUTATION_MAX_DEVIATION)
+		# return value + math.fabs(value) * random.uniform(-MUTATION_MAX_DEVIATION, MUTATION_MAX_DEVIATION) # obsolete
+		return np.random.normal(loc = value, scale = standard_deviation)
 
 	# Returns coordinates of a weight based on an id and a neural net genome
 	# <param> weight_id:	weight 1d id to be decoded into 3d coordinates
@@ -247,7 +265,7 @@ class BotGenePool():
 
 bot_gene_pool = BotGenePool(GENE_POOL_SIZE)
 
-smart_pool = bot_gene_pool.evolve(1000, update_epoch = 20)
+smart_pool = bot_gene_pool.evolve(1001, update_epoch = 20)
 
 cont = 'c'
 while (cont == 'c'):
