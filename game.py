@@ -16,7 +16,7 @@ class gs:
 # <return> if bot won
 def bot_move(bot_net, player_id, opponent_id):
 	cell_id = bot_net.feedforward(datap.convert_board(board.board, player_id, opponent_id))
-	cell_id = datap.extract_cell_id(cell_id) # extract the cell id from the output
+	cell_id = datap.extract_cell_id(cell_id) # extract the cell id from the neural network's output
 
 	success, won = board.fill(cell_id, player_id)
 
@@ -36,15 +36,15 @@ def play_game(bots, show_game = False):
 	# Clear board for game
 	board.clear()
 
+	# Make sure no more than two players are playing
+	try:
+		if len(bots) != 2:
+			raise ValueError("{0} bots cannot play. Exactly two bots must play tic tac toe".format(len(bots)))
+	except ValueError as va:
+		raise
+
 	# Execution Loop
 	while True:
-
-		# Make sure no more than two players are playing
-		try:
-			if len(bots) != 2:
-				raise ValueError("Exactly two bots must play tic tac toe")
-		except ValueError as va:
-			raise
 
 		# Bots play their moves
 		for i in range(len(bots)):
@@ -53,6 +53,9 @@ def play_game(bots, show_game = False):
 			if show_game: 
 				board.display()
 				input()
+
+			if is_standstill(board): # Draw
+				return 0
 
 			if won:
 				if show_game:
@@ -64,3 +67,8 @@ def play_game(bots, show_game = False):
 					board.display()
 					print('Bot {0} lost'.format(i))
 				return -gs.BOT_IDS[i]
+
+# Checks if a board is at a standstill
+def is_standstill(board):
+	# If the board is full, it is at a standstill
+	return board.is_full()

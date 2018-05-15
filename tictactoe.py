@@ -40,6 +40,8 @@ class Board(object):
     def __init__(self, size):
         self.size = size
         self.board = [GameSettings.VOID_CELL for i in range(size**2)]
+        # Number of non-void cells
+        self.filled_count = 0
         # Column (score , dominating player id a.k.a player that uniquely has cells in that column)
         self.col_score = [LineScore(0, GameSettings.VOID_CELL) for i in range(size)]
         # Row score (score , dominating player id)
@@ -51,6 +53,8 @@ class Board(object):
     # Clears board to prepare for a new game
     # Using this saves memory allocation overhead
     def clear(self):
+        # Reset number of non-void cells
+        self.filled_count = 0
         # Clear board marks
         for i in range(len(self.board)):
             self.board[i] = GameSettings.VOID_CELL
@@ -66,7 +70,7 @@ class Board(object):
 
 
     # Fills a specific cell with a specified player id's mark
-    # Return: if the cell has been filled out successfully
+    # <return> if the cell has been filled out successfully
     def fill(self, cell_id, player_id):
         try:    
             if player_id > GameSettings.player_count:
@@ -93,6 +97,9 @@ class Board(object):
         # Fill cell and return with success
         self.board[cell_id] = player_id
 
+        # Update non-void cell count
+        self.filled_count += 1
+
         # Return successfully, check if player won
         return True, self.check_win(row, col)
 
@@ -114,11 +121,15 @@ class Board(object):
         diags = self.diag_score[0].score >= self.size or self.diag_score[1].score >= self.size
         return rowcol or diags
 
+    # Checks if the board has no void cells
+    def is_full(self):
+        return self.filled_count >= len(self.board)
+
 
     # Displays the current state of the board complete with players markings on it
-    def display(self):
+    def display(self, indentation = ''):
         for i in range(self.size):
-            print(self.board[i*self.size : (i+1)*self.size])
+            print(indentation + str(self.board[i*self.size : (i+1)*self.size]))
 
     # Dumps debug information
     def DEBUG_dump(self):
