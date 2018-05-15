@@ -33,6 +33,9 @@ board = ttt.Board(gs.BOARD_SIZE)
 # <return> id of the bot that won the game. negative ID if some bot was disqualified for breaking the rules
 def play_game(bots, show_game = False):
 
+	# Clear board for game
+	board.clear()
+
 	# Execution Loop
 	while True:
 

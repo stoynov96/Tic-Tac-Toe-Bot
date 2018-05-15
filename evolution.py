@@ -3,15 +3,23 @@ import network
 import random
 import math
 import copy
-import numpy as np # debug
+import numpy as np
+import json
 from itertools import chain
 
-GENE_POOL_SIZE = 30
+GENE_POOL_SIZE = 50
 
 # value +/- (abs(value)*mutation) max value of the mutation variable
-MUTATION_MAX_DEVIATION = 1.0
+MUTATION_MAX_DEVIATION = 2.0
 # Fraction of neural net's weights and biases to mutate
 MUTATION_PORTION = 0.05
+
+# Fitness points awarded for a win
+WIN_AWARD = 5
+# Fitness points deducted for losing
+LOSE_PENALTY = 2
+# Fitness points deducted for being disqualified (placing a mark on a marked cell, etc.)
+STUPID_PENALTY = 10
 
 NETWORK_LAYER_SIZES = [len(game.board.board)*2, 30, len(game.board.board)]
 
@@ -30,7 +38,8 @@ class BotGenePool():
 	# Plays all bots in gene pool against all others and calculates fitness based on number of wins
 	def play_gene_pool(self):
 		# Fitness value
-		win_count = [0 for i in range(len(self.gene_pool))]
+		fitness = [0 for i in range(len(self.gene_pool))]
+		stupid_count = [0 for i in fitness]
 
 		for i in range(len(self.gene_pool)):
 			# Play with all other bots in gene pool
@@ -43,51 +52,83 @@ class BotGenePool():
 				game.board.clear()
 
 				# Update win counts
-				if winner == 1:		win_count[i] += 1
-				elif winner == -1:	win_count[i] -= 1
-				elif winner == 2:	win_count[j] += 1
-				else : 				win_count[j] -= 1
+				if winner == 1:
+					fitness[i] += WIN_AWARD
+					fitness[j] -= LOSE_PENALTY
+				elif winner == -1:
+					fitness[i] -= STUPID_PENALTY
+					stupid_count[i] += 1
 
-		return win_count
+				elif winner == 2:
+					fitness[j] += WIN_AWARD
+					fitness[i] -= LOSE_PENALTY
+				elif winner == -2: 				
+					fitness[j] -= STUPID_PENALTY
+					stupid_count[j] += 1
+
+		return fitness, stupid_count
 
 	# Replaces the current gene pool with a new evolved one and returns it
 	# <param> update_epoch:		number of epochs per which an update should be displayed.
 	#								0 if no updates should be displayed 
 	def evolve(self, epochs, update_epoch = 0):
-		# Layout:
-		#	50% top original gene pool
-		#	50% mutated top original
-
 		should_display = True
 
 		for epoch in range(epochs):
 			should_display = update_epoch != 0 and epoch % update_epoch == 0
 
-			# original_portion = 0.5 + (0.5*epoch/epochs) # TODO
-			original_portion = 0.5
-			top_original_count = math.ceil(len(self.gene_pool) * original_portion)
-			mutated_count = math.floor(len(self.gene_pool) * (1-original_portion))
+			# Gene pool content split
+			original_count, mutated_count, bred_count, new_count = BotGenePool.get_pool_split([0.3, 0.3, 0.1], len(self.gene_pool))
 
-			# get fitness
-			fitness = self.play_gene_pool()
+			# Get fitness
+			fitness, stupid = self.play_gene_pool()
 
-			# top original
-			top_indeces = sorted( range(len(self.gene_pool)), key=lambda i: fitness[i], reverse=True )[:top_original_count]
+			# Top original
+			top_indeces = sorted( range(len(self.gene_pool)), key=lambda i: fitness[i], reverse=True )[:original_count]
 			gene_pool = [self.gene_pool[i] for i in top_indeces]
 
-			gene_pool += self.mutate(gene_pool, mutated_count)
+			# Combine genomes
+			combined_indeces = random.sample(range(0,len(gene_pool)), bred_count)
+			gene_pool += BotGenePool.combine([gene_pool[i] for i in combined_indeces])
+
+			# Mutate genomes
+			gene_pool += BotGenePool.mutate(gene_pool, mutated_count)
+
+			# Insert new genomes
+			gene_pool += [network.Network(NETWORK_LAYER_SIZES) for i in range(new_count)]
 
 			self.gene_pool = gene_pool
-			# print(original_portion, gene_pool, top_original_count, mutated_count) # debug
 
+			# Display statistics
 			if should_display:
 				print( 'epoch {0}:'.format(epoch))
 				print( 'gene_pool biases: {0}'.format( sum([ sum([np.sum(b, axis=0) for b in genome.biases]) for genome in self.gene_pool ]) ) )
-				print( 'fitness: {0}'.format(fitness) )
-				print( 'top indeces: {0}, {1}'.format(top_indeces, [fitness[i] for i in top_indeces]) )
+				print( 'gene_pool size: {0}'.format( len(gene_pool) ) )
+				# print( 'fitness: {0}'.format(fitness) )
+				# print( 'stupidity/fitness:     {0} / {1}'.format(stupid, fitness) )
+				print( 'top stupidity/fitness: {0} / {1}'.format([stupid[i] for i in top_indeces[:10]], [fitness[i] for i in top_indeces[:10]]) )
 				print()
 
 		return self.gene_pool
+
+
+	# Combines n genomes and returns b decendents
+	# <param> original_pool:	gene pool from which genomes should be combined
+	# <returns> combined gene pool with the length of the original. None of the original genomes were preserved
+	@staticmethod
+	def combine(original_pool):
+		# Combine the n genomes
+		gene_pool = [network.Network(genome.layers) for genome in original_pool]
+
+		layer_count = len(original_pool[0].layers) - 1
+		for i in range( len(gene_pool) ):
+			for j in range( layer_count ):
+				gene_pool[i].weights[j] = np.copy( original_pool[ (i+j) % len(gene_pool) ].weights[ j ] )
+				gene_pool[i].biases[j] =  np.copy( original_pool[ (i+j) % len(gene_pool) ].biases [ j ] )
+
+
+		# Mutate the resulting genomes
+		return gene_pool
 
 
 	# Mutates a gene pool and returns a mutated pool with a desired length
@@ -98,19 +139,15 @@ class BotGenePool():
 	def mutate(original_pool, mutated_pool_length):
 
 		# Ratio of original pool size to mutated pool size
-		size_ratio = math.ceil(len(original_pool) / mutated_pool_length)
 		mutated_pool = [None for i in range(mutated_pool_length)]
 
+		# Get random indeces of original pool to mutate
+		mutated_indeces = random.sample(range(0,len(original_pool)), mutated_pool_length)
+
 		j = 0
-		for i in range(0, len(original_pool), size_ratio):
+		for i in mutated_indeces:
 			mutated_pool[j] = BotGenePool.mutate_genome(original_pool[i])
 			j += 1
-			# print(original_pool[i].weights[0][:5]) # debug
-
-		# Add a mutation if current number of mutations insufficient
-		# TODO
-		# Truncate if too many mutations
-		# TODO
 
 		return mutated_pool
 
@@ -181,14 +218,53 @@ class BotGenePool():
 			layer += 1
 		return layer, p_id
 
+	# Returns individual sizes of genome splits
+	# Example if fractions = [0.8,0.1] and pool_size = 100, this returns 80,10,10
+	# (last fraction is not needed to be passed. It is assumed tha it completes to 1)
+	@staticmethod
+	def get_pool_split(fractions, pool_size):
+
+		total_fractions = sum(fractions)
+		# Check if input is meaningful
+		try:
+			if total_fractions > 1:
+				raise ValueError('Gene pool fractions must not be sum up to more than 1.0')
+		except ValueError as va:
+			raise
+
+		# Split
+		split = [f * pool_size for f in fractions]
+		split.append( pool_size - total_fractions*pool_size )
+
+		# Make integers
+		split = [int(round(s)) for s in split]
+
+		return split
+
+
 
 
 
 bot_gene_pool = BotGenePool(GENE_POOL_SIZE)
 
-smart_pool = bot_gene_pool.evolve(400, update_epoch = 20)
+smart_pool = bot_gene_pool.evolve(1000, update_epoch = 20)
 
-dumb_bot = smart_pool[1]
-smart_bot = smart_pool[0]
+cont = 'c'
+while (cont == 'c'):
 
-game.play_game([smart_bot, dumb_bot], show_game = True)
+	ind_sb = int(input("Smart Bot: "))
+	ind_db = int(input("Dumb Bot: "))
+
+	dumb_bot = smart_pool[ind_db]
+	smart_bot = smart_pool[ind_sb]
+
+	game.play_game([smart_bot, dumb_bot], show_game = True)
+	cont = input("Game Over. Enter c to continue: ")
+
+# Export winner network
+biases = [ [list(b) for b in biases_layer] for biases_layer in smart_bot.biases ]
+weights = [ [list(w) for w in weights_layer] for weights_layer in smart_bot.weights ]
+nNet = {'biases': biases, 'weights': weights}
+
+with open ('tictactoe_net_parameters.json', 'w') as outfile:
+	json.dump(nNet, outfile)
