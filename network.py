@@ -1,6 +1,8 @@
 import numpy as np
 
 class Network(object):
+	# TODO: add a parameter to allow for initializing weights and biases to zero to reduce overhead
+	# for when they will be changed immideately
 	def __init__(self, layers):
 		self.layer_count = len(layers)
 		self.layers = layers

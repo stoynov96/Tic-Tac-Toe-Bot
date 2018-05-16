@@ -4,11 +4,7 @@ import random
 import math
 import copy
 import numpy as np
-import json
 from itertools import chain
-
-GENE_POOL_COUNT = 1
-GENE_POOL_SIZE = 100
 
 # standard deviation bounds for each mutation
 MUTATION_DEVIATION_MIN = 0.5
@@ -33,14 +29,14 @@ NETWORK_LAYER_SIZES = [len(game.board.board)*2, 30, len(game.board.board)]
 
 class BotEvolution():
 
-	def __init__(self, gene_pool_size):
+	def __init__(self, gene_pool_size, gene_pool_count):
 		try:
 			if (gene_pool_size <= 0):
 				raise ValueError('Gene pool must have a positive size. Current size is {0}'.format(gene_pool_size))
 		except ValueError as va:
 			raise
 
-		self.gene_pools = [ [network.Network(NETWORK_LAYER_SIZES) for b in range(gene_pool_size)] for i in range(GENE_POOL_COUNT) ]
+		self.gene_pools = [ [network.Network(NETWORK_LAYER_SIZES) for b in range(gene_pool_size)] for i in range(gene_pool_count) ]
 
 	# Plays all gene pools to determine their genomes' fitness
 	def play_gene_pools(self):
@@ -111,7 +107,8 @@ class BotEvolution():
 			sorted_ind_lists = []
 			
 			# Evolve all gene pools
-			for i, fitness, stupid in zip(range(len(self.gene_pools)), fitness_list, stupid_list):
+			iter_zip = zip(range(len(self.gene_pools)), fitness_list, stupid_list)
+			for i, fitness, stupid in iter_zip:
 
 				# Temporary gene pool to work with
 				gene_pool = self.gene_pools[i]
@@ -122,12 +119,12 @@ class BotEvolution():
 				# Advance top genomes
 				gene_pool = [gene_pool[i] for i in top_indeces]
 
-				# Combine genomes and add to pool
-				combined_indeces = random.sample(range(0,len(gene_pool)), bred_count)
-				gene_pool += BotEvolution.combine([gene_pool[i] for i in combined_indeces])
+				# Breed genomes from different gene pools and add to this pool: TODO
+				# bred_indeces = random.sample(range(0,len(gene_pool)), bred_count)
+				gene_pool += BotEvolution.breed_pools( self.gene_pools , bred_count )
 
 				# Mutate genomes and add to pool
-				mutation_fitness = [fitness[i] for i in top_indeces] + [ fitness[top_indeces[len(top_indeces)-1]] for i in range(mutated_count)]
+				mutation_fitness = [fitness[i] for i in top_indeces] + [ fitness[top_indeces[len(top_indeces)-1]] for i in range(bred_count)]
 					# assigning the minimum fitness to the bred genomes to encourage their mutation
 				gene_pool += BotEvolution.mutate(gene_pool, mutated_count, mutation_fitness)
 
@@ -144,23 +141,57 @@ class BotEvolution():
 		return self.gene_pools
 
 
-	# Combines n genomes and returns b decendents
-	# <param> original_pool:	gene pool from which genomes should be combined
-	# <returns> combined gene pool with the length of the original. None of the original genomes were preserved
+	""" *----- Breeding -----* ===================================================================================================================================================="""
+
+	# Breeds genomes from different gene pools and returns a single pool
+	# <param=or_pools>		original gene pools from which genomes should be bred
+	# <param=gp_length>		length of the new gene pool
+	# <return> bred gene pool with a specified length
 	@staticmethod
-	def combine(original_pool):
-		# Combine the n genomes
-		gene_pool = [network.Network(genome.layers) for genome in original_pool]
+	def breed_pools(or_pools, gp_length):
+		# Make sure none of the pools is empty
+		try:
+			for pool in or_pools:
+				if len(pool) < 1:
+					raise ValueError('Breeding gene pools must both be of positive length')
+		except ValueError as va:
+			raise
 
-		layer_count = len(original_pool[0].layers) - 1
-		for i in range( len(gene_pool) ):
-			for j in range( layer_count ):
-				gene_pool[i].weights[j] = np.copy( original_pool[ (i+j) % len(gene_pool) ].weights[ j ] )
-				gene_pool[i].biases[j] =  np.copy( original_pool[ (i+j) % len(gene_pool) ].biases [ j ] )
+		# Create random combinations of genomes from the gene pools to breed
+		genome_combo_indeces = [ [ random.randint(0,len(pool)-1) for pool in or_pools ] for i in range(gp_length) ]
+			# Clarification example: if genome_combo_indeces[3] = [1,4,17] that means
+			# For genome [3] of the bred gene pool, take genome [1] from original gene pool [0],
+			# genome [4] from original gene pool [1] and genome [17] from original gene pool [2]
+		# print(genome_combo_indeces) # debug
+
+		# combo = [5,2,0] => [ or[0][5], or[1][2], or[2][0] ]
+		# Return a new gene pool with a length equal to the combined length of the original two
+		return [ BotEvolution.breed_n( [ or_pools[i][c] for i,c in zip(range(len(or_pools)), combo) ] ) for combo in genome_combo_indeces ]
+
+	# Breeds given bots and returns a new bot as a result 
+	# <param> bots:	pool of bots to breed
+	# <return>		new bot that was the result of the breeding
+	@staticmethod
+	def breed_n(bots):
+		# Full neuron selection
+		# Initialize the new bots
+		new_bot = network.Network(bots[0].layers)
+
+		# Breed bots
+		for layer in range(len(bots[0].weights)):
+			for neuron in range(len(bots[0].weights[layer])):
+				parent_gene = random.randint(0,len(bots)-1)
+				new_bot.weights[layer][neuron] = np.copy(bots[parent_gene].weights[layer][neuron])
+				new_bot.biases[layer][neuron] = np.copy(bots[parent_gene].biases[layer][neuron])
+
+		# Return the new bots
+		return new_bot
 
 
-		# Mutate the resulting genomes
-		return gene_pool
+
+
+
+	""" *---- Mutations ----* ===================================================================================================================================================="""
 
 
 	# Mutates a gene pool and returns a mutated pool with a desired length
@@ -232,6 +263,9 @@ class BotEvolution():
 		# Mutation severity is uniform
 		# return value + math.fabs(value) * random.uniform(-MUTATION_MAX_DEVIATION, MUTATION_MAX_DEVIATION) # obsolete
 		return np.random.normal(loc = value, scale = standard_deviation)
+
+
+	""" *-- Miscellaneous --* ===================================================================================================================================================="""
 
 	# Returns coordinates of a weight based on an id and a neural net genome
 	# <param> weight_id:	weight 1d id to be decoded into 3d coordinates
@@ -307,39 +341,3 @@ class BotEvolution():
 			game.board.display(indentation = '    ')
 
 		print()
-
-
-
-
-
-
-bot_gene_pool = BotEvolution(GENE_POOL_SIZE)
-
-smart_pools = bot_gene_pool.evolve(401, update_epoch = 20)
-
-cont = 'c'
-while (cont == 'c'):
-
-	gp_index = int(input("Gene pool to play: "))
-
-	ind_sb = int(input("Smart Bot: "))
-	ind_db = int(input("Dumb Bot: "))
-
-	try:
-		dumb_bot = smart_pools[gp_index][ind_db]
-		smart_bot = smart_pools[gp_index][ind_sb]
-	except IndexError as ie:
-		print("Invalid gene pool index. Please choose a valid gene pool")
-		continue
-
-
-	game.play_game([smart_bot, dumb_bot], show_game = True)
-	cont = input("Game Over. Enter c to continue: ")
-
-# Export winner network
-biases = [ [list(b) for b in biases_layer] for biases_layer in smart_bot.biases ]
-weights = [ [list(w) for w in weights_layer] for weights_layer in smart_bot.weights ]
-nNet = {'biases': biases, 'weights': weights}
-
-with open ('tictactoe_net_parameters.json', 'w') as outfile:
-	json.dump(nNet, outfile)
