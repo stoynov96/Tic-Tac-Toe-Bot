@@ -33,6 +33,12 @@ class Network(object):
 
 		return total_weights, total_biases
 
+	# Returns the average bias of the neural network
+	def get_average_bias(self):
+		sum_aves = sum ([ np.average(b)*b.shape[0] for b in self.biases ])
+		return sum_aves / sum( [b.shape[0] for b in self.biases] )
+
+
 
 def sigmoid(z):
 	return 1.0/(1.0+np.exp(-z))

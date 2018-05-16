@@ -5,14 +5,14 @@ import json
 
 
 GENE_POOL_COUNT = 2
-GENE_POOL_SIZE = 50
+GENE_POOL_SIZE = 60
 
 bot_gene_pool = evolution.BotEvolution(GENE_POOL_SIZE, GENE_POOL_COUNT)
 
-smart_pools = bot_gene_pool.evolve(41, update_epoch = 20)
 
 cont = 'c'
 while (cont == 'c'):
+	smart_pools = bot_gene_pool.evolve(int(input('Generations to evolve for...')), update_generation = 20)
 
 	gp_index = int(input("Gene pool to play: "))
 
@@ -35,5 +35,5 @@ biases = [ [list(b) for b in biases_layer] for biases_layer in smart_bot.biases 
 weights = [ [list(w) for w in weights_layer] for weights_layer in smart_bot.weights ]
 nNet = {'biases': biases, 'weights': weights}
 
-with open ('tictactoe_net_parameters.json', 'w') as outfile:
+with open ('[net_params]tictactoe_net.json', 'w') as outfile:
 	json.dump(nNet, outfile)

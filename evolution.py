@@ -7,24 +7,25 @@ import numpy as np
 from itertools import chain
 
 # standard deviation bounds for each mutation
-MUTATION_DEVIATION_MIN = 0.5
+MUTATION_DEVIATION_MIN = 2.0
 MUTATION_DEVIATION_MAX = 10.0
 # Fraction of neural net's weights and biases to mutate
-MUTATION_PORTION = 0.05
+MUTATION_PORTION = 0.80
 
 # Fitness points added for a win
 FIRST_WIN_AWARD = 5 # award for playing first and winning
 SECOND_WIN_AWARD = 8 # award for playing second and winning
 # Fitness points added for losing
-FIRST_LOSE_AWARD = -5 # penalty for playing first and losing
-SECOND_LOSE_AWARD = -2 # penalty for playing second and losing
+FIRST_LOSE_AWARD = -8 # penalty for playing first and losing
+SECOND_LOSE_AWARD = -5 # penalty for playing second and losing
 # Fitness points added for a draw
-FIRST_DRAW_AWARD = -1 # award for playing first and losing
-SECOND_DRAW_AWARD = 0 # award for playing second and losing
+FIRST_DRAW_AWARD = 0 # award for playing first and losing
+SECOND_DRAW_AWARD = 2 # award for playing second and losing
 # Fitness points added for being disqualified (placing a mark on a marked cell, etc.)
-STUPID_AWARD = -12
+STUPID_AWARD = -8
 
 NETWORK_LAYER_SIZES = [len(game.board.board)*2, 30, len(game.board.board)]
+
 
 
 class BotEvolution():
@@ -90,16 +91,16 @@ class BotEvolution():
 		return fitness, stupid_count
 
 	# Replaces the current gene pool with a new evolved one and returns it
-	# <param> update_epoch:		number of epochs per which an update should be displayed.
+	# <param> update_generation:		number of generations per which an update should be displayed.
 	#								0 if no updates should be displayed 
-	def evolve(self, epochs, update_epoch = 0):
+	def evolve(self, generations, update_generation = 0):
 		should_display = True
 
-		for epoch in range(epochs):
-			should_display = update_epoch != 0 and epoch % update_epoch == 0
+		for generation in range(generations):
+			should_display = update_generation != 0 and generation % update_generation == 0
 
 			# Gene pool content split
-			original_count, mutated_count, bred_count, new_count = BotEvolution.get_pool_split([0.3, 0.3, 0.1], len(self.gene_pools[0]))
+			original_count, mutated_count, bred_count, new_count = BotEvolution.get_pool_split([0.3, 0.6, 0.1], len(self.gene_pools[0]))
 
 			# Get fitness for all gene pools
 			fitness_list, stupid_list = self.play_gene_pools()
@@ -113,14 +114,15 @@ class BotEvolution():
 				# Temporary gene pool to work with
 				gene_pool = self.gene_pools[i]
 
-				# Top genomes to advance from last to this epoch
+				# Top genomes to advance from last to this generation
 				top_indeces = sorted( range(len(gene_pool)), key=lambda i: fitness[i], reverse=True )[:original_count]
 				sorted_ind_lists.append(top_indeces)
 				# Advance top genomes
 				gene_pool = [gene_pool[i] for i in top_indeces]
 
-				# Breed genomes from different gene pools and add to this pool: TODO
-				# bred_indeces = random.sample(range(0,len(gene_pool)), bred_count)
+				# Check for convergence: TODO
+
+				# Breed genomes from different gene pools and add to this pool:
 				gene_pool += BotEvolution.breed_pools( self.gene_pools , bred_count )
 
 				# Mutate genomes and add to pool
@@ -136,7 +138,7 @@ class BotEvolution():
 
 			# Display statistics
 			if should_display:
-				BotEvolution.display_stats(epoch, self.gene_pools, sorted_ind_lists, fitness_list, stupid_list, 8)
+				BotEvolution.display_stats(generation, self.gene_pools, sorted_ind_lists, fitness_list, stupid_list, 8)
 
 		return self.gene_pools
 
@@ -162,7 +164,6 @@ class BotEvolution():
 			# Clarification example: if genome_combo_indeces[3] = [1,4,17] that means
 			# For genome [3] of the bred gene pool, take genome [1] from original gene pool [0],
 			# genome [4] from original gene pool [1] and genome [17] from original gene pool [2]
-		# print(genome_combo_indeces) # debug
 
 		# combo = [5,2,0] => [ or[0][5], or[1][2], or[2][0] ]
 		# Return a new gene pool with a length equal to the combined length of the original two
@@ -206,19 +207,17 @@ class BotEvolution():
 		mutated_pool = [None for i in range(mutated_pool_length)]
 
 		# Get random indeces of original pool to mutate
-		mutated_indeces = random.sample(range(0,len(original_pool)), mutated_pool_length)
+		mutated_indeces = [ random.randint(0, len(original_pool)-1) for i in range(mutated_pool_length) ]
 
 		# Calculate maximum and minimum fitness
 		max_fitness = original_fitness[0]
 		min_fitness = original_fitness[len(original_fitness)-1]
 
 		j = 0
-		# print('mut pool: {0}'.format(original_fitness) ) # debug
 		for i in mutated_indeces:
 			# Calculate standard deviation for each genome mutation operation
 			normal_dist_to_max = (max_fitness-original_fitness[i]) / (max_fitness+1 - min_fitness) # prevent division by zero
 			mutation_deviation = MUTATION_DEVIATION_MIN + normal_dist_to_max * (MUTATION_DEVIATION_MAX - MUTATION_DEVIATION_MIN)
-			# print('  i={0} ft={1} md={2}'.format(i, original_fitness[i],mutation_deviation) ) # debug
 
 			# Mutate genome
 			mutated_pool[j] = BotEvolution.mutate_genome(original_pool[i], mutation_deviation)
@@ -245,9 +244,7 @@ class BotEvolution():
 		mutated_genome = copy.deepcopy(genome)
 		for mut_w in mutate_weights_inds:
 			layer, k, j = BotEvolution.weight_id_to_indeces(mut_w, mutated_genome)
-			# print('mutating weights {0}/{1}/{2} = {3}'.format(layer,k,j, mutated_genome.weights[layer][k][j])) # debug
 			mutated_genome.weights[layer][k][j] = BotEvolution.value_mutate(mutated_genome.weights[layer][k][j], mutation_deviation)
-			# print('  mutated = {0}'.format(mutated_genome.weights[layer][k][j])) # debug
 
 		for mut_b in mutate_bias_inds:
 			layer, k = BotEvolution.bias_id_to_indeces(mut_b, mutated_genome)
@@ -262,6 +259,7 @@ class BotEvolution():
 	def value_mutate(value, standard_deviation):
 		# Mutation severity is uniform
 		# return value + math.fabs(value) * random.uniform(-MUTATION_MAX_DEVIATION, MUTATION_MAX_DEVIATION) # obsolete
+		# return np.random.normal(loc = value, scale = abs(standard_deviation * value))
 		return np.random.normal(loc = value, scale = standard_deviation)
 
 
@@ -322,17 +320,18 @@ class BotEvolution():
 
 		return split
 
-	# Displays statistics about an epoch
+	# Displays statistics about a generation
 	# <param> top_indeces:	gene pool indeces sorted in descending order based on fitness for each gene pool
 	# <param> fitness_list:	fitness values of each genome in all genome pools
 	# <param> stupid_list:	number of disqualifying moves each genome has made for all genome pools
 	# <param> list_limit:	maximum number of elements to display per list
 	@staticmethod
-	def display_stats(epoch, gene_pools, sorted_ind_lists, fitness_list, stupid_list, list_limit):
-		print( 'epoch {0}:'.format(epoch))
+	def display_stats(generation, gene_pools, sorted_ind_lists, fitness_list, stupid_list, list_limit):
+		print( 'generation {0}:'.format(generation))
 		for gene_pool, fitness, stupid, top_indeces in zip(gene_pools, fitness_list, stupid_list, sorted_ind_lists):
 			print( '  Gene Pool:')
-			print( '    gene_pool biases: {0}'.format( sum([ sum([np.sum(b, axis=0) for b in genome.biases]) for genome in gene_pool ]) ) )
+			# print( '    gene_pool biases: {0}'.format( sum([ sum([np.sum(b, axis=0) for b in genome.biases]) for genome in gene_pool ]) ) )
+			print( '    gene_pool avg biases: {0}'.format( sum([genome.get_average_bias() for genome in gene_pool])/len(gene_pool) ) )
 			print( '    gene_pool size: {0}'.format( len(gene_pool) ) )
 			print( '    top stupidity/fitness: {0} / {1}'.format([stupid[i] for i in top_indeces[:list_limit]], [fitness[i] for i in top_indeces[:list_limit]]) )
 
