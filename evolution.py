@@ -55,6 +55,19 @@ class GenePool(object):
 		# Initialize top indeces based on fitness score (high to low)
 		self.top_indeces = None
 
+	# Detects if a gene pool is convergent and returns the result
+	# <param=min_sd> minimum standard deviation required for the pool to not be considered convergent 
+	def is_convergent(self, min_sd, should_display = False, indentation = ''):
+		# Find fitness values standard deviation
+		fitness_np_arr = np.array([ g.fitness for g in self.pool ])
+		fitness_sd = np.std ( fitness_np_arr , axis = 0)
+		# Display standard_deviation if needed
+		if should_display:
+			print(indentation + 'fitness array: {0}'.format(fitness_np_arr))
+			print(indentation + 'fitness standard deviation: {0}'.format(fitness_sd))
+		# Determine convergence
+		return fitness_sd < min_sd
+
 
 	# Add a list of genomes to the gene pool
 	# <param=list_of_genomes> List of objects of type Genome to add to the gene pool
@@ -104,6 +117,7 @@ class BotEvolution():
 			raise
 
 		self.gene_pools = [ GenePool([ Genome(network.Network(NETWORK_LAYER_SIZES)) for b in range(gene_pool_size) ]) for i in range(gene_pool_count) ]
+		self.fittest = []
 
 	# Resets fitness and stupid values of all genomes in the gene pool
 	def reset_fitness(self):
@@ -152,10 +166,14 @@ class BotEvolution():
 	# Replaces the current gene pool with a new evolved one and returns it
 	# <param> update_generation:		number of generations per which an update should be displayed.
 	#								0 if no updates should be displayed 
-	def evolve(self, generations, update_generation = 0):
+	def evolve(self, update_generation = 0):
 		should_display = True
+		generation = 0
 
-		for generation in range(generations):
+		# Indeces of gene pools marked for deletion
+		gp_to_delete = []
+
+		while len(self.gene_pools) > 0:
 			should_display = update_generation != 0 and generation % update_generation == 0
 
 			# Gene pool content split
@@ -179,6 +197,20 @@ class BotEvolution():
 				gp.sort_and_trim()
 
 				# Check for convergence: TODO
+				if gp.is_convergent(min_sd = 1.0):
+					# Mark for deletion
+					gp_to_delete.append(i)
+
+					# Display state after the removal of gene pool
+					should_display = True
+
+					# Save the fittest genome
+					self.fittest.append(gp.pool[0])
+
+					# Notify of convergence
+					print('Convergence detected @ i={0}...'.format(i))
+
+					break
 
 				# Breed genomes from different gene pools and add to this pool:
 				min_fitness = gp.pool[-1].fitness # Smallest fitness value
@@ -196,8 +228,17 @@ class BotEvolution():
 			# Display statistics
 			if should_display:
 				BotEvolution.display_stats(generation, self.gene_pools, 8)
+				print()
 
-		return self.gene_pools
+			# Delete gene pools marked for deletion
+			for i in range(len(gp_to_delete)-1, -1, -1):
+				del self.gene_pools[i]
+			gp_to_delete = []
+
+			# Update generation counter
+			generation += 1
+
+		return self.fittest
 
 
 	""" *----- Breeding -----* ===================================================================================================================================================="""
@@ -395,8 +436,9 @@ class BotEvolution():
 	@staticmethod
 	def display_stats(generation, gene_pools, list_limit):
 		print( 'generation {0}:'.format(generation))
-		for gene_pool in gene_pools:
-			print( '  Gene Pool:')
+		for i in range(len(gene_pools)):
+			gene_pool = gene_pools[i]
+			print( '  Gene Pool {0}:'.format(i))
 			# print( '    gene_pool biases: {0}'.format( sum([ sum([np.sum(b, axis=0) for b in genome.biases]) for genome in gene_pool ]) ) )
 			print( '    gene_pool avg biases: {0}'.format( sum([genome.genome.get_average_bias() for genome in gene_pool.pool])/len(gene_pool.pool) ) )
 			print( '    gene_pool size: {0}'.format( len(gene_pool.pool) ) )
@@ -406,5 +448,3 @@ class BotEvolution():
 			# Print out the board after a game of the top two bots
 			game.play_game([g.genome for g in gene_pool.pool[0:2]])
 			game.board.display(indentation = '    ')
-
-		print()

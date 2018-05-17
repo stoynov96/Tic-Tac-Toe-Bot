@@ -41,7 +41,8 @@ def play_game(bots, show_game = False):
 		if len(bots) != 2:
 			raise ValueError("{0} bots cannot play. Exactly two bots must play tic tac toe".format(len(bots)))
 	except ValueError as va:
-		raise
+		print(va)
+		return
 
 	# Execution Loop
 	while True:

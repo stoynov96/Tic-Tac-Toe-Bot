@@ -5,28 +5,24 @@ import json
 
 
 GENE_POOL_COUNT = 2
-GENE_POOL_SIZE = 40
+GENE_POOL_SIZE = 60
 
 bot_gene_pool = evolution.BotEvolution(GENE_POOL_SIZE, GENE_POOL_COUNT)
 
 
 cont = 'c'
 while (cont == 'c'):
-	smart_pools = bot_gene_pool.evolve(int(input('Generations to evolve for...')), update_generation = 20)
-
-	gp_index = int(input("Gene pool to play: "))
-
-	ind_sb = int(input("Smart Bot: "))
-	ind_db = int(input("Dumb Bot: "))
+	fittest = bot_gene_pool.evolve(update_generation = 20)
 
 	try:
-		dumb_bot = smart_pools[gp_index].pool[ind_db].genome
-		smart_bot = smart_pools[gp_index].pool[ind_sb].genome
+		smart_bot = fittest[0].genome
+		dumb_bot = fittest[ max(0, len(fittest)-1) ].genome
 	except IndexError as ie:
 		print("Invalid gene pool index. Please choose a valid gene pool")
 		continue
 
 
+	print('Bots game:')
 	game.play_game([smart_bot, dumb_bot], show_game = True)
 	cont = input("Game Over. Enter c to continue: ")
 
