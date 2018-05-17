@@ -1,6 +1,8 @@
 import numpy as np
 
 class Network(object):
+	# TODO: add a parameter to allow for initializing weights and biases to zero to reduce overhead
+	# for when they will be changed immideately
 	def __init__(self, layers):
 		self.layer_count = len(layers)
 		self.layers = layers
@@ -30,6 +32,12 @@ class Network(object):
 			total_biases += b.shape[0]
 
 		return total_weights, total_biases
+
+	# Returns the average bias of the neural network
+	def get_average_bias(self):
+		sum_aves = sum ([ np.average(b)*b.shape[0] for b in self.biases ])
+		return sum_aves / sum( [b.shape[0] for b in self.biases] )
+
 
 
 def sigmoid(z):
