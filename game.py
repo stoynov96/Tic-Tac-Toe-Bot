@@ -29,7 +29,7 @@ def bot_move(bot_net, player_id, opponent_id):
 board = ttt.Board(gs.BOARD_SIZE)
 
 
-# <param> bots:	list of length 2 - the two bots that will play against each other
+# <param> bots:	list of length 2 of neural networks - the two bots that will play against each other
 # <return> id of the bot that won the game. negative ID if some bot was disqualified for breaking the rules
 def play_game(bots, show_game = False):
 
