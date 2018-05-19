@@ -10,7 +10,7 @@ from itertools import chain
 MUTATION_DEVIATION_MIN = 2.0
 MUTATION_DEVIATION_MAX = 10.0
 # Fraction of neural net's weights and biases to mutate
-MUTATION_PORTION = 0.80
+MUTATION_PORTION = 0.50
 
 # Minimum standard deviation of a pool's fitness values for it to not be considered convergent 
 CONVERGENCE_SD = 1.0
@@ -32,7 +32,7 @@ NETWORK_LAYER_SIZES = [len(game.board.board)*2, 30, len(game.board.board)]
 
 class Genome(object):
 
-	def __init__(self, genome, fitness = 0, stupid = 0):
+	def __init__(self, genome, fitness, stupid):
 		self.genome = genome
 		self.fitness = fitness
 		self.stupid = stupid
@@ -104,6 +104,9 @@ class GenePool(object):
 			self.pool[i].fitness = 0
 			self.pool[i].stupid = 0
 
+	def get_length(self):
+		return len(self.pool)
+
 
 
 
@@ -116,7 +119,7 @@ class BotEvolution():
 		except ValueError as va:
 			raise
 
-		self.gene_pools = [ GenePool([ Genome(network.Network(NETWORK_LAYER_SIZES)) for b in range(gene_pool_size) ]) for i in range(gene_pool_count) ]
+		self.gene_pools = [ GenePool([ Genome(network.Network(NETWORK_LAYER_SIZES),0,0) for b in range(gene_pool_size) ]) for i in range(gene_pool_count) ]
 		self.fittest = []
 
 	# Resets fitness and stupid values of all genomes in the gene pool
@@ -177,7 +180,7 @@ class BotEvolution():
 			should_display = update_generation != 0 and generation % update_generation == 0
 
 			# Gene pool content split
-			original_count, mutated_count, bred_count, new_count = BotEvolution.get_pool_split([0.3, 0.6, 0.1], len(self.gene_pools[0].pool))
+			original_count, mutated_count, bred_count, new_count = BotEvolution.get_pool_split([0.4, 0.2, 0.4], len(self.gene_pools[0].pool))
 
 			# Get fitness for all gene pools
 			# TODO: Display before and after. It could be that fitness values aren't updated (passed by value)
@@ -214,7 +217,8 @@ class BotEvolution():
 
 				# Breed genomes from different gene pools and add to this pool:
 				min_fitness = gp.pool[-1].fitness # Smallest fitness value
-				gp.add_to_pool( BotEvolution.breed_pools( self.gene_pools , bred_count , init_fitness = min_fitness) )
+				gp.add_to_pool( BotEvolution.breed_pairs(gp, bred_count, init_fitness = min_fitness) )
+				# gp.add_to_pool( BotEvolution.breed_pools( self.gene_pools , bred_count , init_fitness = min_fitness) )
 
 				# Mutate genomes and add to pool
 				gp.add_to_pool( BotEvolution.mutate(gp, mutated_count, init_fitness = min_fitness) )
@@ -270,6 +274,25 @@ class BotEvolution():
 		# Return a new gene pool with a length gp_length
 		return [ BotEvolution.breed_n( [ or_pools[i].pool[c] for i,c in zip(range(len(or_pools)), combo) ] , init_fitness = init_fitness ) for combo in genome_combo_indeces ]
 
+	# Breeds pairs from a single pool
+	# <param=pool> GenePool from which to breed pairs
+	# <param=bred_count> Number of bred genomes required to be returned
+	# <return> List of Genome objects - bred pool
+	@staticmethod
+	def breed_pairs(pool, bred_count, init_fitness = 0):
+		# Initialize bred list
+		bred = []
+
+		# Breed the appropriate number of pairs
+		for b in range(bred_count//2 + 1):
+			# Randomly choose two bots to cross over
+			inds = [random.randint(0, pool.get_length()-1) for i in range(2)]
+			bred += BotEvolution.breed_pair([ pool.pool[inds[i]] for i in range(len(inds)) ] , init_fitness = init_fitness)
+
+		# Return as many pairs as needed
+		return bred[:bred_count]
+
+
 	# Breeds given bots and returns a new bot as a result 
 	# <param=bots>	list<Genome> list of bots to breed
 	# <param=init_fitness> initial fitness of the newly created bot
@@ -277,7 +300,7 @@ class BotEvolution():
 	@staticmethod
 	def breed_n(bots, init_fitness):
 		# Full neuron selection
-		# Initialize the new bots
+		# Initialize the new bot
 		new_bot = Genome(network.Network(bots[0].genome.layers), fitness = init_fitness, stupid=111) # specific stupid value for display purposes
 
 		# Breed bots
@@ -289,6 +312,30 @@ class BotEvolution():
 
 		# Return the new bots
 		return new_bot
+
+	# Breeds two given bots and returns two new bots as a result 
+	# <param=bots>	list<Genome> of lenght=2 list of bots to breed
+	# <param=init_fitness> initial fitness of the newly created bot
+	# <return> list<Genome> lenght=2 new bots that were the result of the breeding
+	@staticmethod
+	def breed_pair(bots, init_fitness):
+		# Length check
+		if len(bots) > 2: print('WARNING! Trying to breed more than 2 bots in breed_2(). Only the first two bots will be bred')
+		# Full neuron selection
+		# Initialize the new bots
+		new_bots = [Genome(network.Network(bots[0].genome.layers), fitness = init_fitness, stupid=111) for i in range(2)]  # specific stupid value for display purposes
+
+		# Breed bots
+		for layer in range(len(bots[0].genome.weights)):
+			for neuron in range(len(bots[0].genome.weights[layer])):
+				parent_gene = random.randint(0,1)
+				new_bots[0].genome.weights[layer][neuron] = np.copy(bots[parent_gene].genome.weights[layer][neuron])
+				new_bots[0].genome.biases[layer][neuron] = np.copy(bots[parent_gene].genome.biases[layer][neuron])
+				new_bots[1].genome.weights[layer][neuron] = np.copy(bots[1-parent_gene].genome.weights[layer][neuron])
+				new_bots[1].genome.biases[layer][neuron] = np.copy(bots[1-parent_gene].genome.biases[layer][neuron])
+
+		# Return the new bots
+		return new_bots
 
 
 
@@ -423,7 +470,7 @@ class BotEvolution():
 			raise
 
 		# Split
-		split = [f * pool_size for f in fractions]
+		split = [round(f,2) * pool_size for f in fractions]
 		split.append( pool_size - total_fractions*pool_size )
 
 		# Make integers

@@ -4,8 +4,8 @@ import json
 
 
 
-GENE_POOL_COUNT = 2
-GENE_POOL_SIZE = 60
+GENE_POOL_COUNT = 1
+GENE_POOL_SIZE = 100
 
 bot_gene_pool = evolution.BotEvolution(GENE_POOL_SIZE, GENE_POOL_COUNT)
 
